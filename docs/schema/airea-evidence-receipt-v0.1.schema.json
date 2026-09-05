@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airea.ai/schema/evidence-receipt-v0.1.schema.json",
+  "title": "AIREA Evidence Capsule Receipt v0.1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "receipt_type", "receipt_version", "receipt_id", "created_at", "claim_ref",
+    "receipt_kind", "subject_ref", "artifact_refs", "input_refs", "output_refs",
+    "conditions", "result", "proof_tier_effect", "actor", "independence",
+    "scope", "evidence_refs", "integrity", "limitations"
+  ],
+  "properties": {
+    "receipt_type": { "const": "airea.evidence_receipt" },
+    "receipt_version": { "const": "0.1" },
+    "receipt_id": { "type": "string", "pattern": "^R-[0-9A-Z][0-9A-Z-]*$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "claim_ref": { "type": "string", "pattern": "^C-[0-9A-Z][0-9A-Z-]*$" },
+    "receipt_kind": {
+      "enum": [
+        "REGISTRATION", "SOURCE_CAPTURE", "SPECIFICATION", "IMPLEMENTATION",
+        "EXECUTABLE_RESULT", "DEMONSTRATION", "AUTHOR_REPRODUCTION",
+        "INDEPENDENT_REPRODUCTION", "EXTERNAL_VALIDATION", "CORRECTION",
+        "CHALLENGE", "VERIFICATION"
+      ]
+    },
+    "subject_ref": { "type": "string", "minLength": 1 },
+    "artifact_refs": { "type": "array", "items": { "type": "string" } },
+    "input_refs": { "type": "array", "items": { "type": "string" } },
+    "output_refs": { "type": "array", "items": { "type": "string" } },
+    "conditions": {
+      "type": "object",
+      "required": ["condition_status", "references"],
+      "properties": {
+        "condition_status": { "enum": ["COMPLETE", "PARTIAL", "UNKNOWN"] },
+        "probe_suite_ref": { "type": ["string", "null"] },
+        "code_commit": { "type": ["string", "null"] },
+        "evaluator_ref": { "type": ["string", "null"] },
+        "evaluator_version": { "type": ["string", "null"] },
+        "parameters": { "type": "object", "additionalProperties": true },
+        "references": { "type": "array", "items": { "type": "string" } },
+        "unavailable": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["status", "summary"],
+      "properties": {
+        "status": { "enum": ["PASS", "FAIL", "PARTIAL", "PENDING", "REVOKED", "UNKNOWN"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "expected": {},
+        "observed": {},
+        "method": { "type": ["string", "null"] },
+        "execution_ref": { "type": ["string", "null"] },
+        "failure_reason": { "type": ["string", "null"] }
+      }
+    },
+    "proof_tier_effect": {
+      "type": "object",
+      "required": ["maximum_supported_tier", "independence_qualified"],
+      "properties": {
+        "maximum_supported_tier": {
+          "enum": ["P0_DECLARED", "P1_SPECIFIED", "P2_IMPLEMENTED", "P3_DEMONSTRATED", "P4_REPRODUCED", "P5_INDEPENDENTLY_VALIDATED"]
+        },
+        "independence_qualified": { "type": "boolean" },
+        "explanation": { "type": "string" }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "required": ["actor_ref", "actor_type"],
+      "properties": {
+        "actor_ref": { "type": "string" },
+        "actor_type": { "enum": ["AUTHOR", "ORGANIZATION", "INDEPENDENT_RESEARCHER", "REVIEWER", "AUTOMATED_SYSTEM", "UNKNOWN"] },
+        "organization": { "type": ["string", "null"] }
+      }
+    },
+    "independence": {
+      "type": "object",
+      "required": ["status", "relationship_to_author"],
+      "properties": {
+        "status": { "enum": ["INDEPENDENT", "AUTHOR", "COLLABORATOR", "UNKNOWN"] },
+        "relationship_to_author": { "type": "string" },
+        "independence_basis": { "type": ["string", "null"] }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["statement"],
+      "properties": {
+        "statement": { "type": "string", "minLength": 1 },
+        "population": { "type": ["string", "null"] },
+        "time_range": { "type": ["string", "null"] },
+        "conditions_ref": { "type": ["string", "null"] },
+        "out_of_scope": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "evidence_refs": { "type": "array", "items": { "type": "string" } },
+    "integrity": {
+      "type": "object",
+      "required": ["canonicalization", "receipt_sha256", "manifest_ref", "status"],
+      "properties": {
+        "canonicalization": { "type": "string" },
+        "receipt_sha256": { "$ref": "#/$defs/digest" },
+        "manifest_ref": { "type": "string" },
+        "status": { "enum": ["VERIFIED", "UNVERIFIED", "FAILED"] },
+        "signature_ref": { "type": ["string", "null"] }
+      }
+    },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$" }
+  }
+}
