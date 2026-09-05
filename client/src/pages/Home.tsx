@@ -83,6 +83,27 @@ const history = [
   { date: "FUTURE", title: "External reproduction submitted", detail: "Missing proof threshold · P4 → P5 candidate", tone: "future" },
 ];
 
+const conflictSets = [
+  {
+    id: "CS-0007",
+    claim: "C-014",
+    type: "CONDITION_MISMATCH / VALUE_MISMATCH",
+    title: "Institutional workflow margin differs across input sets",
+    left: { id: "OR-001", label: "Author execution", value: "$1,676.00", date: "29 Jul 2026", condition: "Registered labor-rate file", result: "Supports C-014", tone: "teal" },
+    right: { id: "OR-003", label: "Independent run", value: "$1,540.00", date: "04 Sep 2026", condition: "Different labor-rate file", result: "Contradicts C-014", tone: "coral" },
+    resolution: "Unresolved — independent reproduction with registered inputs is still missing.",
+  },
+];
+
+const claimHistory = [
+  { date: "29 Jul 2026", state: "SUPPORTED", proof: "P3 · DEMONSTRATED", reason: "Calculator execution recorded and manuscript values matched.", receipt: "R-00031 · EXECUTABLE RESULT · PASS", tone: "teal" },
+  { date: "29 Jul 2026", state: "SUPPORTED", proof: "P4 · REPRODUCED", reason: "Author rerun regenerated the registered output.", receipt: "R-00042 · AUTHOR REPRODUCTION · PASS", tone: "moss" },
+  { date: "04 Sep 2026", state: "CONTESTED", proof: "P4 · REPRODUCED", reason: "A second run returned a different value under a different labor-rate file.", receipt: "R-00055 · INDEPENDENT REPRODUCTION · PARTIAL", tone: "coral" },
+  { date: "FUTURE", state: "PENDING", proof: "P5 · INDEPENDENTLY VALIDATED", reason: "Run the independent reproduction with the registered input set.", receipt: "Missing receipt · NEXT THRESHOLD", tone: "future" },
+];
+
+type ImportedRecord = { fileName: string; kind: "Observation Record" | "Evidence Capsule"; status: "VALIDATED" | "IMPORTED"; summary: string };
+
 function StatusPill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: string }) {
   return <span className={`pill pill-${tone}`}>{children}</span>;
 }
@@ -102,6 +123,9 @@ export default function Home() {
   const [drawer, setDrawer] = useState<"provenance" | "receipt" | "proof" | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
   const [query, setQuery] = useState("");
+  const [activeConflict, setActiveConflict] = useState(conflictSets[0]);
+  const [imports, setImports] = useState<ImportedRecord[]>([]);
+  const [importMessage, setImportMessage] = useState("");
 
   const visibleClaims = useMemo(
     () => claims.filter((claim) => `${claim.id} ${claim.statement} ${claim.type}`.toLowerCase().includes(query.toLowerCase())),
@@ -115,8 +139,29 @@ export default function Home() {
 
   const navigateView = (view: string) => {
     setActiveTab(view);
-    const target = document.getElementById(view === "work" ? "work-overview" : view === "claims" ? "claim-ledger" : "record-history");
+    const target = document.getElementById(view === "work" ? "work-overview" : view === "claims" ? "claim-ledger" : view === "conflicts" ? "conflict-sets" : "record-history");
     target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const kind = file.name.toLowerCase().includes("capsule") ? "Evidence Capsule" : "Observation Record";
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        const valid = kind === "Observation Record"
+          ? parsed?.record_type === "airea.observation_record" && parsed?.record_version === "0.1" && typeof parsed?.observation_id === "string" && parsed?.subject && parsed?.conditions && parsed?.probe && parsed?.input && parsed?.output && Array.isArray(parsed?.claim_assertions) && parsed?.integrity
+          : parsed?.capsule_type === "airea.evidence_capsule" && parsed?.capsule_version === "0.1" && typeof parsed?.capsule_id === "string" && Array.isArray(parsed?.record_refs) && Array.isArray(parsed?.receipt_refs) && Array.isArray(parsed?.file_entries) && parsed?.integrity;
+        setImports((current) => [{ fileName: file.name, kind, status: valid ? "VALIDATED" : "IMPORTED", summary: valid ? "Required v0.1 fields recognized." : "Imported locally; required fields need review." }, ...current]);
+        setImportMessage(valid ? `${kind} validated and added to this record.` : `${kind} imported for review.`);
+      } catch {
+        setImportMessage("The selected file is not valid JSON.");
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = "";
   };
 
   return (
@@ -141,10 +186,11 @@ export default function Home() {
           {[
             ["work", BookOpen, "Work overview"],
             ["claims", Network, "Claims & evidence"],
+            ["conflicts", GitBranch, "Conflict sets"],
             ["history", History, "History"],
           ].map(([key, Icon, label]) => (
             <button key={key as string} className={`nav-item ${activeTab === key ? "active" : ""}`} onClick={() => navigateView(key as string)}>
-              <Icon size={16} strokeWidth={1.8} /><span>{label as string}</span>{key === "claims" && <span className="nav-count">3</span>}
+              <Icon size={16} strokeWidth={1.8} /><span>{label as string}</span>{key === "claims" && <span className="nav-count">3</span>}{key === "conflicts" && <span className="nav-count coral-count">1</span>}
             </button>
           ))}
         </nav>
@@ -202,9 +248,24 @@ export default function Home() {
             </div>
           </section>
 
+          <section id="conflict-sets" className="section-block conflict-section fade-in delay-3">
+            <div className="section-heading"><div><div className="section-index">01A / CONFLICT SETS</div><h2>Where the record disagrees</h2></div><StatusPill tone="coral">1 OPEN CONFLICT</StatusPill></div>
+            <div className="conflict-toolbar"><div><strong>{activeConflict.id}</strong><span>{activeConflict.type}</span></div><button className="quiet-button" onClick={() => setDrawer("provenance")}><CircleHelp size={14} /> How conflicts work</button></div>
+            <div className="conflict-title"><h3>{activeConflict.title}</h3><p>{activeConflict.resolution}</p></div>
+            <div className="conflict-compare">
+              {[activeConflict.left, activeConflict.right].map((record, index) => <article className={`observation-panel ${record.tone}`} key={record.id}><div className="observation-panel-top"><span className="mono">{record.id}</span><StatusPill tone={record.tone}>{record.result}</StatusPill></div><span className="observation-role">{record.label}</span><strong className="observation-value">{record.value}</strong><dl><div><dt>OBSERVED</dt><dd>{record.date}</dd></div><div><dt>INPUT CONDITION</dt><dd>{record.condition}</dd></div><div><dt>CLAIM</dt><dd>{activeConflict.claim}</dd></div></dl><button className="panel-link" onClick={() => { setSelectedClaim(claims[0]); setDrawer("provenance"); }}>Inspect provenance <ArrowUpRight size={13} /></button>{index === 0 ? <span className="panel-badge">SUPPORTS</span> : <span className="panel-badge">CONTRADICTS</span>}</article>)}
+            </div>
+            <div className="conflict-interpretation"><span className="callout-icon">!</span><div><strong>Interpretation remains scoped</strong><p>The records establish different outputs. Because the independent run used a different labor-rate file, AIREA records a condition mismatch rather than declaring the claim false.</p></div><StatusPill tone="amber">UNRESOLVED</StatusPill></div>
+          </section>
+
           <section className="split-grid fade-in delay-3">
             <div className="section-block compact"><div className="section-heading"><div><div className="section-index">02 / ARTIFACT INVENTORY</div><h2>What the record contains</h2></div><button className="quiet-button"><ExternalLink size={14} /> Export</button></div><div className="artifact-list">{artifacts.map(({ name, kind, className, icon: Icon }) => <button className="artifact-row" key={name} onClick={() => setDrawer("provenance")}><Icon size={16} /><span className="artifact-main"><strong>{name}</strong><small>{kind}</small></span><span className="artifact-class">{className}</span><ChevronRight size={14} /></button>)}</div></div>
             <div id="record-history" className="section-block compact"><div className="section-heading"><div><div className="section-index">03 / RECORD HISTORY</div><h2>How certainty changed</h2></div><button className="quiet-button" onClick={() => navigateView("history")}><History size={14} /> Full history</button></div><div className="timeline">{history.map((item, index) => <div className={`timeline-item ${item.tone}`} key={`${item.date}-${item.title}`}><div className="timeline-marker"><span /></div><div className="timeline-copy"><span className="timeline-date mono">{item.date}</span><strong>{item.title}</strong><p>{item.detail}</p></div>{index === 3 && <StatusPill tone="moss">P4</StatusPill>}</div>)}</div></div>
+          </section>
+
+          <section className="section-block import-history-grid fade-in delay-4">
+            <div className="import-card"><div className="section-index">04 / IMPORT EVIDENCE</div><h2>Bring a record into the work</h2><p>Load a real v0.1 Observation Record or Evidence Capsule locally. The prototype validates the type and version before adding it to this record.</p><label className="import-drop"><Fingerprint size={20} /><span><strong>Choose JSON file</strong><small>Observation Record or Evidence Capsule · local only</small></span><input type="file" accept="application/json,.json" onChange={handleImport} /></label>{importMessage && <div className="import-message" role="status"><ShieldCheck size={15} />{importMessage}</div>}{imports.length > 0 && <div className="import-list">{imports.map((item) => <div className="import-row" key={`${item.fileName}-${item.kind}`}><span className="import-status">{item.status === "VALIDATED" ? "✓" : "·"}</span><span><strong>{item.fileName}</strong><small>{item.kind} · {item.summary}</small></span></div>)}</div>}</div>
+            <div id="claim-history" className="history-card"><div className="section-index">05 / CLAIM HISTORY</div><h2>State transitions with receipts</h2><p>Claim state changes only when a recorded event and receipt justify the transition.</p><div className="state-history">{claimHistory.map((event, index) => <div className={`state-event ${event.tone}`} key={`${event.date}-${event.state}-${index}`}><div className="state-event-dot" /><div className="state-event-copy"><span className="mono">{event.date}</span><strong>{event.state} <i>·</i> {event.proof}</strong><p>{event.reason}</p><small>{event.receipt}</small></div></div>)}</div><div className="history-rule"><ShieldCheck size={15} /><span>Receipts advance evidence tier only within their defined scope. They never create blanket verification.</span></div></div>
           </section>
 
           <section className="record-banner fade-in delay-4"><div className="record-banner-icon"><Fingerprint size={20} /></div><div><span className="section-index">VERIFICATION VIEWS</span><h2>Observation Record & Evidence Capsule</h2><p>Inspect the machine-readable evidence behind this work without leaving the record.</p></div><div className="record-banner-actions"><button onClick={() => setDrawer("receipt")}><ClipboardCheck size={15} /> View receipts</button><button onClick={() => setDrawer("provenance")}><LockKeyhole size={15} /> Provenance</button></div></section>
