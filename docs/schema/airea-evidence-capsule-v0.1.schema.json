@@ -60,6 +60,7 @@
       "properties": {
         "canonicalization": { "type": "string" },
         "manifest_sha256": { "$ref": "#/$defs/digest" },
+        "file_sha256": { "$ref": "#/$defs/digest" },
         "sha256sums_path": { "type": "string" },
         "signature_ref": { "type": ["string", "null"] },
         "transparency_ref": { "type": ["string", "null"] },

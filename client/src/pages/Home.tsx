@@ -7,7 +7,8 @@ import {
   ChevronRight,
   CircleHelp,
   ClipboardCheck,
-  ExternalLink,
+  CheckCircle2,
+  Download,
   FileCode2,
   FileSpreadsheet,
   Fingerprint,
@@ -18,6 +19,7 @@ import {
   Menu,
   Network,
   PanelRightClose,
+  Plus,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -93,6 +95,15 @@ const conflictSets = [
     right: { id: "OR-003", label: "Independent run", value: "$1,540.00", date: "04 Sep 2026", condition: "Different labor-rate file", result: "Contradicts C-014", tone: "coral" },
     resolution: "Unresolved — independent reproduction with registered inputs is still missing.",
   },
+  {
+    id: "CS-0011",
+    claim: "C-009",
+    type: "METHOD_DISAGREEMENT",
+    title: "Governance overhead estimate depends on allocation method",
+    left: { id: "OR-007", label: "Scenario model A", value: "18.4% of cost", date: "29 Jul 2026", condition: "Fully allocated labor", result: "Supports C-009", tone: "teal" },
+    right: { id: "OR-008", label: "Scenario model B", value: "11.2% of cost", date: "31 Jul 2026", condition: "Direct labor only", result: "Qualifies C-009", tone: "amber" },
+    resolution: "Scope differs — the claim needs a declared allocation policy before comparison can be resolved.",
+  },
 ];
 
 const claimHistory = [
@@ -101,6 +112,21 @@ const claimHistory = [
   { date: "04 Sep 2026", state: "CONTESTED", proof: "P4 · REPRODUCED", reason: "A second run returned a different value under a different labor-rate file.", receipt: "R-00055 · INDEPENDENT REPRODUCTION · PARTIAL", tone: "coral" },
   { date: "FUTURE", state: "PENDING", proof: "P5 · INDEPENDENTLY VALIDATED", reason: "Run the independent reproduction with the registered input set.", receipt: "Missing receipt · NEXT THRESHOLD", tone: "future" },
 ];
+
+const work0001Export = {
+  work_id: "AIREA-WORK-0001",
+  title: "The True Cost of Trustworthy AI",
+  work_type: "ORIGINAL_TECHNICAL_ANALYSIS",
+  author: { name: "Sierra N. Warren", organization: "Sierra Warren Developments, LLC" },
+  version: "1.0",
+  registration_state: "REGISTERED",
+  evidence_profile: "MIXED_EVIDENCE",
+  claims: claims.map(({ id, state, proof, type, statement, missing }) => ({ claim_id: id, statement, claim_type: type, state, proof_tier: proof, missing_proof: missing })),
+  artifacts: artifacts.map(({ name, kind, className }) => ({ name, artifact_kind: kind, evidence_class: className })),
+  conflict_sets: conflictSets.map(({ id, claim, type, resolution }) => ({ conflict_id: id, claim_id: claim, conflict_type: type, current_resolution: resolution })),
+  claim_history: claimHistory,
+  exported_at: "2026-09-05T00:00:00Z",
+};
 
 type ImportedRecord = { fileName: string; kind: "Observation Record" | "Evidence Capsule"; status: "VALIDATED" | "IMPORTED"; summary: string };
 
@@ -126,12 +152,17 @@ export default function Home() {
   const [activeConflict, setActiveConflict] = useState(conflictSets[0]);
   const [imports, setImports] = useState<ImportedRecord[]>([]);
   const [importMessage, setImportMessage] = useState("");
+  const [conflictFilter, setConflictFilter] = useState("ALL");
+  const [resolutionEvents, setResolutionEvents] = useState<{ id: string; date: string; text: string }[]>([]);
+  const [digestStatus, setDigestStatus] = useState<"IDLE" | "VERIFYING" | "COMPUTED" | "VERIFIED" | "FAILED">("IDLE");
+  const [digestMessage, setDigestMessage] = useState("");
 
   const visibleClaims = useMemo(
     () => claims.filter((claim) => `${claim.id} ${claim.statement} ${claim.type}`.toLowerCase().includes(query.toLowerCase())),
     [query],
   );
 
+  const visibleConflicts = conflictSets.filter((conflict) => conflictFilter === "ALL" || conflict.type.includes(conflictFilter));
   const openClaim = (claim: (typeof claims)[number]) => {
     setSelectedClaim(claim);
     setDrawer("provenance");
@@ -143,6 +174,41 @@ export default function Home() {
     target?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const exportWork = () => {
+    const payload = JSON.stringify({ ...work0001Export, resolution_events: resolutionEvents }, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "airea-work-0001.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  const addResolutionEvent = () => {
+    const conflict = activeConflict;
+    setResolutionEvents((events) => [{ id: `EV-${String(events.length + 1).padStart(3, "0")}`, date: new Date().toISOString().slice(0, 10), text: `${conflict.id} reviewed: resolution remains open; next receipt required.` }, ...events]);
+  };
+  const verifyCapsuleDigest = async (file: File, expectedDigest?: string) => {
+    setDigestStatus("VERIFYING");
+    setDigestMessage("");
+    try {
+      const bytes = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      const hex = Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      const computedDigest = `sha256:${hex}`;
+      if (expectedDigest) {
+        const matches = computedDigest.toLowerCase() === expectedDigest.toLowerCase();
+        setDigestStatus(matches ? "VERIFIED" : "FAILED");
+        setDigestMessage(matches ? `Verified against capsule manifest: ${computedDigest.slice(0, 24)}…${computedDigest.slice(-8)}.` : `Digest mismatch. Computed ${computedDigest.slice(0, 24)}…${computedDigest.slice(-8)}; manifest declares ${expectedDigest.slice(0, 24)}…${expectedDigest.slice(-8)}.`);
+      } else {
+        setDigestStatus("COMPUTED");
+        setDigestMessage(`SHA-256 computed: ${computedDigest.slice(0, 24)}…${computedDigest.slice(-8)}. No file_sha256 was present for comparison.`);
+      }
+    } catch {
+      setDigestStatus("FAILED");
+      setDigestMessage("Web Crypto could not compute a digest for this file.");
+    }
+  };
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -156,6 +222,7 @@ export default function Home() {
           : parsed?.capsule_type === "airea.evidence_capsule" && parsed?.capsule_version === "0.1" && typeof parsed?.capsule_id === "string" && Array.isArray(parsed?.record_refs) && Array.isArray(parsed?.receipt_refs) && Array.isArray(parsed?.file_entries) && parsed?.integrity;
         setImports((current) => [{ fileName: file.name, kind, status: valid ? "VALIDATED" : "IMPORTED", summary: valid ? "Required v0.1 fields recognized." : "Imported locally; required fields need review." }, ...current]);
         setImportMessage(valid ? `${kind} validated and added to this record.` : `${kind} imported for review.`);
+        if (kind === "Evidence Capsule") void verifyCapsuleDigest(file, parsed?.integrity?.file_sha256 || parsed?.integrity?.manifest_sha256);
       } catch {
         setImportMessage("The selected file is not valid JSON.");
       }
@@ -250,21 +317,22 @@ export default function Home() {
 
           <section id="conflict-sets" className="section-block conflict-section fade-in delay-3">
             <div className="section-heading"><div><div className="section-index">01A / CONFLICT SETS</div><h2>Where the record disagrees</h2></div><StatusPill tone="coral">1 OPEN CONFLICT</StatusPill></div>
-            <div className="conflict-toolbar"><div><strong>{activeConflict.id}</strong><span>{activeConflict.type}</span></div><button className="quiet-button" onClick={() => setDrawer("provenance")}><CircleHelp size={14} /> How conflicts work</button></div>
+            <div className="conflict-toolbar"><div><strong>{activeConflict.id}</strong><span>{activeConflict.type}</span></div><div className="conflict-toolbar-actions"><select aria-label="Filter conflict sets" value={conflictFilter} onChange={(event) => setConflictFilter(event.target.value)}><option value="ALL">All conflict types</option><option value="CONDITION">Condition mismatch</option><option value="METHOD">Method disagreement</option></select><select aria-label="Choose conflict set" value={activeConflict.id} onChange={(event) => setActiveConflict(conflictSets.find((item) => item.id === event.target.value) || conflictSets[0])}>{visibleConflicts.map((item) => <option key={item.id} value={item.id}>{item.id} · {item.claim}</option>)}</select><button className="quiet-button" onClick={() => setDrawer("provenance")}><CircleHelp size={14} /> How conflicts work</button></div></div>
             <div className="conflict-title"><h3>{activeConflict.title}</h3><p>{activeConflict.resolution}</p></div>
             <div className="conflict-compare">
               {[activeConflict.left, activeConflict.right].map((record, index) => <article className={`observation-panel ${record.tone}`} key={record.id}><div className="observation-panel-top"><span className="mono">{record.id}</span><StatusPill tone={record.tone}>{record.result}</StatusPill></div><span className="observation-role">{record.label}</span><strong className="observation-value">{record.value}</strong><dl><div><dt>OBSERVED</dt><dd>{record.date}</dd></div><div><dt>INPUT CONDITION</dt><dd>{record.condition}</dd></div><div><dt>CLAIM</dt><dd>{activeConflict.claim}</dd></div></dl><button className="panel-link" onClick={() => { setSelectedClaim(claims[0]); setDrawer("provenance"); }}>Inspect provenance <ArrowUpRight size={13} /></button>{index === 0 ? <span className="panel-badge">SUPPORTS</span> : <span className="panel-badge">CONTRADICTS</span>}</article>)}
             </div>
-            <div className="conflict-interpretation"><span className="callout-icon">!</span><div><strong>Interpretation remains scoped</strong><p>The records establish different outputs. Because the independent run used a different labor-rate file, AIREA records a condition mismatch rather than declaring the claim false.</p></div><StatusPill tone="amber">UNRESOLVED</StatusPill></div>
+            <div className="conflict-interpretation"><span className="callout-icon">!</span><div><strong>Interpretation remains scoped</strong><p>The records establish different outputs. Because the independent run used a different labor-rate file, AIREA records a condition mismatch rather than declaring the claim false.</p></div><div className="resolution-actions"><StatusPill tone="amber">UNRESOLVED</StatusPill><button className="quiet-button" onClick={addResolutionEvent}><Plus size={13} /> Add review event</button></div></div>
           </section>
 
+          {resolutionEvents.length > 0 && <div className="resolution-events">{resolutionEvents.map((event) => <div className="resolution-event" key={event.id}><CheckCircle2 size={14} /><span><strong>{event.id} · {event.date}</strong><small>{event.text}</small></span></div>)}</div>}
           <section className="split-grid fade-in delay-3">
-            <div className="section-block compact"><div className="section-heading"><div><div className="section-index">02 / ARTIFACT INVENTORY</div><h2>What the record contains</h2></div><button className="quiet-button"><ExternalLink size={14} /> Export</button></div><div className="artifact-list">{artifacts.map(({ name, kind, className, icon: Icon }) => <button className="artifact-row" key={name} onClick={() => setDrawer("provenance")}><Icon size={16} /><span className="artifact-main"><strong>{name}</strong><small>{kind}</small></span><span className="artifact-class">{className}</span><ChevronRight size={14} /></button>)}</div></div>
+            <div className="section-block compact"><div className="section-heading"><div><div className="section-index">02 / ARTIFACT INVENTORY</div><h2>What the record contains</h2></div><button className="quiet-button" onClick={exportWork}><Download size={14} /> Export JSON</button></div><div className="artifact-list">{artifacts.map(({ name, kind, className, icon: Icon }) => <button className="artifact-row" key={name} onClick={() => setDrawer("provenance")}><Icon size={16} /><span className="artifact-main"><strong>{name}</strong><small>{kind}</small></span><span className="artifact-class">{className}</span><ChevronRight size={14} /></button>)}</div></div>
             <div id="record-history" className="section-block compact"><div className="section-heading"><div><div className="section-index">03 / RECORD HISTORY</div><h2>How certainty changed</h2></div><button className="quiet-button" onClick={() => navigateView("history")}><History size={14} /> Full history</button></div><div className="timeline">{history.map((item, index) => <div className={`timeline-item ${item.tone}`} key={`${item.date}-${item.title}`}><div className="timeline-marker"><span /></div><div className="timeline-copy"><span className="timeline-date mono">{item.date}</span><strong>{item.title}</strong><p>{item.detail}</p></div>{index === 3 && <StatusPill tone="moss">P4</StatusPill>}</div>)}</div></div>
           </section>
 
           <section className="section-block import-history-grid fade-in delay-4">
-            <div className="import-card"><div className="section-index">04 / IMPORT EVIDENCE</div><h2>Bring a record into the work</h2><p>Load a real v0.1 Observation Record or Evidence Capsule locally. The prototype validates the type and version before adding it to this record.</p><label className="import-drop"><Fingerprint size={20} /><span><strong>Choose JSON file</strong><small>Observation Record or Evidence Capsule · local only</small></span><input type="file" accept="application/json,.json" onChange={handleImport} /></label>{importMessage && <div className="import-message" role="status"><ShieldCheck size={15} />{importMessage}</div>}{imports.length > 0 && <div className="import-list">{imports.map((item) => <div className="import-row" key={`${item.fileName}-${item.kind}`}><span className="import-status">{item.status === "VALIDATED" ? "✓" : "·"}</span><span><strong>{item.fileName}</strong><small>{item.kind} · {item.summary}</small></span></div>)}</div>}</div>
+            <div className="import-card"><div className="section-index">04 / IMPORT EVIDENCE</div><h2>Bring a record into the work</h2><p>Load a real v0.1 Observation Record or Evidence Capsule locally. The prototype validates the type and version before adding it to this record.</p><label className="import-drop"><Fingerprint size={20} /><span><strong>Choose JSON file</strong><small>Observation Record or Evidence Capsule · local only</small></span><input type="file" accept="application/json,.json" onChange={handleImport} /></label>{importMessage && <div className="import-message" role="status"><ShieldCheck size={15} />{importMessage}</div>}{digestStatus !== "IDLE" && <div className={`digest-message ${digestStatus.toLowerCase()}`} role="status"><Fingerprint size={14} /><span><strong>Digest {digestStatus.toLowerCase()}</strong><small>{digestMessage}</small></span></div>}{imports.length > 0 && <div className="import-list">{imports.map((item) => <div className="import-row" key={`${item.fileName}-${item.kind}`}><span className="import-status">{item.status === "VALIDATED" ? "✓" : "·"}</span><span><strong>{item.fileName}</strong><small>{item.kind} · {item.summary}</small></span></div>)}</div>}</div>
             <div id="claim-history" className="history-card"><div className="section-index">05 / CLAIM HISTORY</div><h2>State transitions with receipts</h2><p>Claim state changes only when a recorded event and receipt justify the transition.</p><div className="state-history">{claimHistory.map((event, index) => <div className={`state-event ${event.tone}`} key={`${event.date}-${event.state}-${index}`}><div className="state-event-dot" /><div className="state-event-copy"><span className="mono">{event.date}</span><strong>{event.state} <i>·</i> {event.proof}</strong><p>{event.reason}</p><small>{event.receipt}</small></div></div>)}</div><div className="history-rule"><ShieldCheck size={15} /><span>Receipts advance evidence tier only within their defined scope. They never create blanket verification.</span></div></div>
           </section>
 

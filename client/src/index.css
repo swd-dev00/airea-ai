@@ -98,3 +98,21 @@ button { cursor:pointer; }
 .history-rule { display:flex; align-items:flex-start; gap:7px; padding:12px 0 0; color:var(--teal); font-size:10px; }
 .history-rule span { color:#356b63; }
 @media (max-width:760px) { .conflict-toolbar { align-items:flex-start; gap:10px; flex-direction:column; }.conflict-compare,.import-history-grid { grid-template-columns:1fr; }.observation-value { font-size:28px; }.conflict-interpretation { flex-wrap:wrap; }.conflict-interpretation .pill { margin-left:28px; }.import-history-grid { gap:40px; } }
+
+/* Export, conflict resolution, and digest verification */
+.conflict-toolbar-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.conflict-toolbar-actions select { border:1px solid var(--line); background:var(--white); color:var(--ink); padding:6px 8px; font-family:var(--mono); font-size:9px; max-width:190px; }
+.resolution-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.resolution-actions .quiet-button { color:var(--amber); }
+.resolution-events { display:grid; gap:6px; margin-top:10px; }
+.resolution-event { display:flex; align-items:center; gap:9px; padding:10px 12px; background:var(--moss-soft); color:var(--moss); border:1px solid #cad9c9; }
+.resolution-event span { display:grid; gap:2px; }
+.resolution-event strong { font-family:var(--mono); font-size:9px; font-weight:500; }
+.resolution-event small { color:#55705f; font-size:10px; }
+.digest-message { display:flex; align-items:flex-start; gap:8px; margin-top:8px; padding:10px; background:var(--paper-dark); color:var(--muted); }
+.digest-message span { display:grid; gap:2px; }
+.digest-message strong { font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.07em; }
+.digest-message small { font-size:10px; word-break:break-word; }
+.digest-message.verified { background:var(--teal-soft); color:var(--teal); }
+.digest-message.failed { background:var(--coral-soft); color:var(--coral); }
+@media (max-width:760px) { .conflict-toolbar-actions { width:100%; }.conflict-toolbar-actions select { flex:1; max-width:none; }.resolution-actions { margin-left:28px; } }
