@@ -129,6 +129,12 @@ const work0001Export = {
 };
 
 type ImportedRecord = { fileName: string; kind: "Observation Record" | "Evidence Capsule"; status: "VALIDATED" | "IMPORTED"; summary: string };
+type ResolutionStatus = "ACCEPTED" | "REJECTED" | "SUPERSEDED";
+const initialClaimResolutions: Record<string, { status: ResolutionStatus; receipt: string; note: string }> = {
+  "C-014": { status: "ACCEPTED", receipt: "R-00031 · PASS", note: "Accepted within the registered input set; independent result remains scoped as contradictory." },
+  "C-001": { status: "ACCEPTED", receipt: "R-00042 · PASS", note: "Accepted as the current analytical formulation." },
+  "C-009": { status: "SUPERSEDED", receipt: "R-00061 · METHOD UPDATE", note: "Supersedes the earlier allocation method; the claim remains inferred under the revised scope." },
+};
 
 function StatusPill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: string }) {
   return <span className={`pill pill-${tone}`}>{children}</span>;
@@ -156,6 +162,7 @@ export default function Home() {
   const [resolutionEvents, setResolutionEvents] = useState<{ id: string; date: string; text: string }[]>([]);
   const [digestStatus, setDigestStatus] = useState<"IDLE" | "VERIFYING" | "COMPUTED" | "VERIFIED" | "FAILED">("IDLE");
   const [digestMessage, setDigestMessage] = useState("");
+  const [claimResolutions, setClaimResolutions] = useState(initialClaimResolutions);
 
   const visibleClaims = useMemo(
     () => claims.filter((claim) => `${claim.id} ${claim.statement} ${claim.type}`.toLowerCase().includes(query.toLowerCase())),
@@ -170,12 +177,12 @@ export default function Home() {
 
   const navigateView = (view: string) => {
     setActiveTab(view);
-    const target = document.getElementById(view === "work" ? "work-overview" : view === "claims" ? "claim-ledger" : view === "conflicts" ? "conflict-sets" : "record-history");
+    const target = document.getElementById(view === "work" ? "work-overview" : view === "claims" ? "claim-ledger" : view === "conflicts" ? "conflict-sets" : view === "resolution" ? "resolution-workflow" : "record-history");
     target?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const exportWork = () => {
-    const payload = JSON.stringify({ ...work0001Export, resolution_events: resolutionEvents }, null, 2);
+    const payload = JSON.stringify({ ...work0001Export, claim_resolutions: claimResolutions, resolution_events: resolutionEvents }, null, 2);
     const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -187,6 +194,12 @@ export default function Home() {
   const addResolutionEvent = () => {
     const conflict = activeConflict;
     setResolutionEvents((events) => [{ id: `EV-${String(events.length + 1).padStart(3, "0")}`, date: new Date().toISOString().slice(0, 10), text: `${conflict.id} reviewed: resolution remains open; next receipt required.` }, ...events]);
+  };
+  const setResolutionStatus = (claimId: string, status: ResolutionStatus) => {
+    const eventId = `REV-${Date.now().toString(36).toUpperCase()}`;
+    const date = new Date().toISOString().slice(0, 10);
+    setClaimResolutions((current) => ({ ...current, [claimId]: { ...current[claimId], status, receipt: `${eventId} · REVIEW DECISION`, note: `${status[0]}${status.slice(1).toLowerCase()} by the current review decision; prior states remain in the history.` } }));
+    setResolutionEvents((events) => [{ id: eventId, date, text: `${claimId} moved to ${status}; review receipt recorded and prior decision preserved.` }, ...events]);
   };
   const verifyCapsuleDigest = async (file: File, expectedDigest?: string) => {
     setDigestStatus("VERIFYING");
@@ -254,6 +267,7 @@ export default function Home() {
             ["work", BookOpen, "Work overview"],
             ["claims", Network, "Claims & evidence"],
             ["conflicts", GitBranch, "Conflict sets"],
+            ["resolution", ShieldCheck, "Resolution workflow"],
             ["history", History, "History"],
           ].map(([key, Icon, label]) => (
             <button key={key as string} className={`nav-item ${activeTab === key ? "active" : ""}`} onClick={() => navigateView(key as string)}>
@@ -304,13 +318,14 @@ export default function Home() {
             <div className="section-heading"><div><div className="section-index">01 / CLAIM LEDGER</div><h2>What this work claims</h2></div><div className="section-tools"><label className="search-field"><Search size={14} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter claims" aria-label="Filter claims" /></label><button className="quiet-button" onClick={() => setDrawer("proof")}><SlidersHorizontal size={14} /> Evidence policy</button></div></div>
             <div className="claims-list">
               {visibleClaims.map((claim) => (
+                (() => { const resolution = claimResolutions[claim.id]; return (
                 <article className={`claim-card ${selectedClaim.id === claim.id ? "selected" : ""}`} key={claim.id}>
-                  <div className="claim-card-top"><div className="claim-id mono">{claim.id}</div><StatusPill tone={claim.accent}>{claim.state}</StatusPill><span className="claim-type">{claim.type}</span><button className="claim-open" aria-label={`Inspect provenance for ${claim.id}`} onClick={() => openClaim(claim)}><ArrowUpRight size={16} /></button></div>
+                  <div className="claim-card-top"><div className="claim-id mono">{claim.id}</div><StatusPill tone={claim.accent}>{claim.state}</StatusPill><StatusPill tone={resolution.status === "ACCEPTED" ? "moss" : resolution.status === "REJECTED" ? "coral" : "amber"}>{resolution.status}</StatusPill><span className="claim-type">{claim.type}</span><button className="claim-open" aria-label={`Inspect provenance for ${claim.id}`} onClick={() => openClaim(claim)}><ArrowUpRight size={16} /></button></div>
                   <button className="claim-statement" onClick={() => openClaim(claim)}>{claim.statement}</button>
                   <p className="claim-summary">{claim.summary}</p>
                   <div className="claim-footer"><div className="claim-proof"><span className="proof-label">PROOF TIER</span><strong>{claim.proof}</strong><button className="info-dot" aria-label={`Explain ${claim.proof}`} onClick={() => setDrawer("proof")}>i</button></div><div className="evidence-counts"><span className="count-support"><ArrowUpRight size={13} /> {claim.supports} support</span>{claim.contradicts > 0 && <span className="count-conflict"><ArrowDownRight size={13} /> {claim.contradicts} contradict</span>}</div></div>
                   <div className="missing-proof"><span className="missing-icon">∕</span><span><small>MISSING PROOF</small>{claim.missing}</span><ChevronRight size={15} /></div>
-                </article>
+                </article>); })()
               ))}
             </div>
           </section>
@@ -336,6 +351,7 @@ export default function Home() {
             <div id="claim-history" className="history-card"><div className="section-index">05 / CLAIM HISTORY</div><h2>State transitions with receipts</h2><p>Claim state changes only when a recorded event and receipt justify the transition.</p><div className="state-history">{claimHistory.map((event, index) => <div className={`state-event ${event.tone}`} key={`${event.date}-${event.state}-${index}`}><div className="state-event-dot" /><div className="state-event-copy"><span className="mono">{event.date}</span><strong>{event.state} <i>·</i> {event.proof}</strong><p>{event.reason}</p><small>{event.receipt}</small></div></div>)}</div><div className="history-rule"><ShieldCheck size={15} /><span>Receipts advance evidence tier only within their defined scope. They never create blanket verification.</span></div></div>
           </section>
 
+          <section id="resolution-workflow" className="section-block resolution-workflow fade-in delay-4"><div className="section-heading"><div><div className="section-index">06 / RESOLUTION WORKFLOW</div><h2>Decide what the record accepts</h2></div><span className="workflow-note"><ShieldCheck size={14} /> Every decision keeps its receipt</span></div><div className="resolution-legend"><span><i className="legend-dot accepted" /> ACCEPTED · current evidence is admitted within scope</span><span><i className="legend-dot rejected" /> REJECTED · current evidence is not admitted</span><span><i className="legend-dot superseded" /> SUPERSEDED · replaced without erasing history</span></div><div className="resolution-table">{claims.map((claim) => { const resolution = claimResolutions[claim.id]; return <article className="resolution-row" key={`resolution-${claim.id}`}><div className="resolution-claim"><span className="mono">{claim.id}</span><strong>{claim.statement}</strong><small>{resolution.note}</small></div><div className={`resolution-current ${resolution.status.toLowerCase()}`}><span>CURRENT DECISION</span><strong>{resolution.status}</strong><small>{resolution.receipt}</small></div><div className="resolution-actions-grid"><button className={resolution.status === "ACCEPTED" ? "selected" : ""} onClick={() => setResolutionStatus(claim.id, "ACCEPTED")}>Accept</button><button className={resolution.status === "REJECTED" ? "selected rejected" : ""} onClick={() => setResolutionStatus(claim.id, "REJECTED")}>Reject</button><button className={resolution.status === "SUPERSEDED" ? "selected superseded" : ""} onClick={() => setResolutionStatus(claim.id, "SUPERSEDED")}>Supersede</button></div></article>; })}</div><div className="workflow-footnote"><History size={15} /><span>Changing a decision updates the current resolution only. Earlier decisions, claim states, and receipts remain append-preserved in the claim history.</span></div></section>
           <section className="record-banner fade-in delay-4"><div className="record-banner-icon"><Fingerprint size={20} /></div><div><span className="section-index">VERIFICATION VIEWS</span><h2>Observation Record & Evidence Capsule</h2><p>Inspect the machine-readable evidence behind this work without leaving the record.</p></div><div className="record-banner-actions"><button onClick={() => setDrawer("receipt")}><ClipboardCheck size={15} /> View receipts</button><button onClick={() => setDrawer("provenance")}><LockKeyhole size={15} /> Provenance</button></div></section>
 
           <footer className="page-footer"><span>AIREA AI · operational layer of the AI Observatory & Conservatory</span><span className="mono">No claim without an evidence path.</span></footer>
