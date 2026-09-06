@@ -5,12 +5,22 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import AireaHome from "./pages/AireaHome";
+import KifoProgram from "./pages/KifoProgram";
+import WorksIndex from "./pages/WorksIndex";
 
 
 function Router() {
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
+      <Route path={"/"} component={AireaHome} />
+      <Route path={"/programs/kifo"} component={KifoProgram} />
+      <Route path={"/programs/kifo/:view"} component={KifoProgram} />
+      <Route path={"/works/airea-work-0001"} component={Home} />
+      <Route path={"/works"} component={WorksIndex} />
+      <Route path={"/researchers"} component={AireaHome} />
+      <Route path={"/evidence"} component={AireaHome} />
+      <Route path={"/institutions"} component={AireaHome} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
