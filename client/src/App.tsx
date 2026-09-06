@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import AireaHome from "./pages/AireaHome";
 import KifoProgram from "./pages/KifoProgram";
 import WorksIndex from "./pages/WorksIndex";
+import AireaDirectory from "./pages/AireaDirectory";
 
 
 function Router() {
@@ -18,9 +19,9 @@ function Router() {
       <Route path={"/programs/kifo/:view"} component={KifoProgram} />
       <Route path={"/works/airea-work-0001"} component={Home} />
       <Route path={"/works"} component={WorksIndex} />
-      <Route path={"/researchers"} component={AireaHome} />
-      <Route path={"/evidence"} component={AireaHome} />
-      <Route path={"/institutions"} component={AireaHome} />
+      <Route path={"/researchers"}>{() => <AireaDirectory kind="researchers" />}</Route>
+      <Route path={"/evidence"}>{() => <AireaDirectory kind="evidence" />}</Route>
+      <Route path={"/institutions"}>{() => <AireaDirectory kind="institutions" />}</Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
